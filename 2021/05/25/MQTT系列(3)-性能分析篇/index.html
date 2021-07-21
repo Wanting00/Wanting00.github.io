@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32-next.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16-next.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+
+<link rel="stylesheet" href="//cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5.14.0/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/animate.css@3.1.1/animate.min.css">
+
+<script class="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"example.com","root":"/","scheme":"Gemini","version":"8.0.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12},"copycode":false,"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":false,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"fadeInDown","post_body":"fadeInDown","coll_header":"fadeInLeft","sidebar":"fadeInUp"}},"prism":false,"i18n":{"placeholder":"搜索...","empty":"没有找到任何搜索结果：${query}","hits_time":"找到 ${hits} 个搜索结果（用时 ${time} 毫秒）","hits":"找到 ${hits} 个搜索结果"}};
+  </script>
+
+  <meta name="description" content="基于远程测试下的QoS性能分析与适用场景分析">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MQTT系列(3)-性能分析">
+<meta property="og:url" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/index.html">
+<meta property="og:site_name" content="Wanting">
+<meta property="og:description" content="基于远程测试下的QoS性能分析与适用场景分析">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/01.jpg">
+<meta property="og:image" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/02.jpg">
+<meta property="og:image" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/03.jpg">
+<meta property="og:image" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/04.jpg">
+<meta property="og:image" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/05.jpg">
+<meta property="og:image" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/06.jpg">
+<meta property="og:image" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/07.jpg">
+<meta property="article:published_time" content="2021-05-25T05:15:41.000Z">
+<meta property="article:modified_time" content="2021-05-24T22:44:43.869Z">
+<meta property="article:tag" content="MQTT">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/01.jpg">
+
+
+<link rel="canonical" href="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/">
+
+
+<script class="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>MQTT系列(3)-性能分析 | Wanting</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  body { margin-top: 2rem; }
+
+  .use-motion .menu-item,
+  .use-motion .sidebar,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header {
+    visibility: visible;
+  }
+
+  .use-motion .header,
+  .use-motion .site-brand-container .toggle,
+  .use-motion .footer { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle,
+  .use-motion .custom-logo-image {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line {
+    transform: scaleX(1);
+  }
+
+  .search-pop-overlay, .sidebar-nav { display: none; }
+  .sidebar-panel { display: block; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage" class="use-motion">
+  <div class="headband"></div>
+
+  <main class="main">
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+        <span class="toggle-line"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <i class="logo-line"></i>
+      <h1 class="site-title">Wanting</h1>
+      <i class="logo-line"></i>
+    </a>
+      <p class="site-subtitle" itemprop="description">个人学习笔记</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+<nav class="site-nav">
+  <ul class="main-menu menu">
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>目录</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+        
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+    <span class="toggle-line"></span>
+  </div>
+
+  <aside class="sidebar">
+
+    <div class="sidebar-inner sidebar-nav-active sidebar-toc-active">
+      <ul class="sidebar-nav">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <section class="post-toc-wrap sidebar-panel">
+          <div class="post-toc animated"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#QoS-level-comparing"><span class="nav-text">QoS level comparing</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Analysis-against-the-broker"><span class="nav-text">Analysis against the broker</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#Broader-network-Environment"><span class="nav-text">Broader network Environment</span></a></li></ol></div>
+      </section>
+      <!--/noindex-->
+
+      <section class="site-overview-wrap sidebar-panel">
+        <div class="site-author animated" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt=""
+      src="/images/profile.jpg">
+  <p class="site-author-name" itemprop="name"></p>
+  <div class="site-description" itemprop="description"></div>
+</div>
+<div class="site-state-wrap animated">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives">
+          <span class="site-state-item-count">5</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">3</span>
+        <span class="site-state-item-name">目录</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+
+
+
+      </section>
+    </div>
+  </aside>
+  <div class="sidebar-dimmer"></div>
+
+
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+<noscript>
+  <div class="noscript-warning">Theme NexT works best with JavaScript enabled</div>
+</noscript>
+
+
+    <div class="main-inner post posts-expand">
+      
+
+      
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://example.com/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/profile.jpg">
+      <meta itemprop="name" content="">
+      <meta itemprop="description" content="">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Wanting">
+    </span>
+
+    
+    
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          MQTT系列(3)-性能分析
+        </h1>
+
+        <div class="post-meta-container">
+          <div class="post-meta">
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-calendar"></i>
+      </span>
+      <span class="post-meta-item-text">发表于</span>
+      
+
+      <time title="创建时间：2021-05-25 13:15:41 / 修改时间：06:44:43" itemprop="dateCreated datePublished" datetime="2021-05-25T13:15:41+08:00">2021-05-25</time>
+    </span>
+    <span class="post-meta-item">
+      <span class="post-meta-item-icon">
+        <i class="far fa-folder"></i>
+      </span>
+      <span class="post-meta-item-text">分类于</span>
+        <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+          <a href="/categories/MQTT%EF%BC%88%E6%B6%88%E6%81%AF%E9%98%9F%E5%88%97%E9%81%A5%E6%B5%8B%E4%BC%A0%E8%BE%93%E5%8D%8F%E8%AE%AE%EF%BC%89/" itemprop="url" rel="index"><span itemprop="name">MQTT（消息队列遥测传输协议）</span></a>
+        </span>
+    </span>
+
+  
+    <span class="post-meta-item" title="阅读次数" id="busuanzi_container_page_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="far fa-eye"></i>
+      </span>
+      <span class="post-meta-item-text">阅读次数：</span>
+      <span id="busuanzi_value_page_pv"></span>
+    </span>
+</div>
+
+            <div class="post-description">基于远程测试下的QoS性能分析与适用场景分析</div>
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+        <br/>
+
+
+
+
+<h2 id="QoS-level-comparing"><a href="#QoS-level-comparing" class="headerlink" title="QoS level comparing"></a>QoS level comparing</h2><p><strong>1.1.Observation &amp; Explanation</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;Here I use “MQTTLens” as client, subscribe to a local Mosquitto broker, and use 3 matched levels of QoS.<br><br><br>&nbsp;&nbsp;&nbsp;&nbsp;<strong>1.1.1. Subscribe: QoS-0, Publish: QoS-0</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Every message is sent only once.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(1)Counter → Broker </p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(2)Broker → Client</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Sometimes the adjacent message loss happens. This is because QoS means ”at most once delivery”. The sender doesn’t care whether the receiver can receive the message or not, and only send one message per cycle, so sometimes <strong>message loss</strong> happens. Also, it is possible to be out-of-order, because of the network circumstance (The packet might <strong>travel through different routes</strong>).</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;*Actually here is not the transmission loss, it’s about the low sampling rate of wireshark.</p>
+<img src="/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/01.jpg" class="" title="wireshark抓包">
+
+<br>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>1.1.2. Subscribe: QoS-1, Publish: QoS-1</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Every message can be received at least once.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(1)Counter → Broker<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(2)Broker → Counter (Ack)<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(3)Broker → Client<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(4)Client  → Broker(Ack)</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;The Qos-1 level ensures that the receiver can get the messages at least once. This requires the sender to keep the message, until it gets a feedback from receiver. If the feedback missing, the sender will send the message again, and sometimes might cause <strong>duplication</strong> or <strong>out-of-order</strong>, because of the network circumstance (The packet might <strong>travel through different routes</strong>).</p>
+<img src="/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/02.jpg" class="" title="wireshark抓包">
+
+<br>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>1.1.3. Subscribe: QoS-2, Publish: QoS-2</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;QoS-2 ensures that there must be one and only one message arrived. The handshake process is a little complex, and can be illustrated as the flowchart. In this level, it seems that there is <strong>no duplication</strong>, but still <strong>exist out-of-order</strong>, because of the network circumstance (The packet might <strong>travel through different routes</strong>).</p>
+<img src="/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/03.jpg" class="" title="wireshark抓包">
+<img src="/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/04.jpg" class="" title="wireshark抓包">
+
+<br>
+<br>
+
+<p><strong>1.2.Suitable in which circumstance?</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>1.2.1. QoS-0</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;There is too much data to transmit, and data loss is not important, because with big range of sampling, errors can be ignored. E.g. sensors for detecting temperature (sampling 10 times per minute).</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>1.2.1. QoS-1</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;The data must be received, but duplication has few influence. E.g. to make sure that a  “close” command is received by the machine (and duplication of “close” is not important).</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>1.2.3. QoS-2</strong></p>
+<p>The data must be received and only received once, duplication is not allowable. E.g. a sensor to detect endangered wild animals.</p>
+<br>
+<br>
+
+<h2 id="Analysis-against-the-broker"><a href="#Analysis-against-the-broker" class="headerlink" title="Analysis against the broker"></a>Analysis against the broker</h2><p>**2.1. Charts **</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;The data is collected</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>2.1.1. QoS = 0</strong></p>
+<img src="/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/05.jpg" class="" title="数据记录">
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>2.1.2. QoS = 1</strong></p>
+<img src="/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/06.jpg" class="" title="数据记录">
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>2.1.3. QoS = 2</strong></p>
+<img src="/2021/05/25/MQTT%E7%B3%BB%E5%88%97(3)-%E6%80%A7%E8%83%BD%E5%88%86%E6%9E%90%E7%AF%87/07.jpg" class="" title="数据记录">
+
+<br>
+
+<p><strong>2.2. Expectation &amp; Observation &amp; Analysis</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;The data is collected on Sunday noon. It is a smaller than another sample in wee hours, but only a little difference.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>2.2.1. Message rate</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Expectation:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;① As the delay setting becomes larger, the message rate reduces.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;② As the QoS level rises, the message rate reduces.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Observation:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Matches.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Analysis:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;① “message rate = messages / time”, so it is an obvious mathematical relation that, with the increasing of delay setting, the message rate reduces.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;② As the QoS level rises, the handshake process becomes more complex. It takes more time to “PUBLISH” “PUBACK” “PUBREC”… Those procedures are time consuming thus lowering down the message rate.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>2.2.2. Loss rate &amp; Out-of-order rate</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Expectation:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;It is expected that, the QoS-0 will cause message loss and out-of-order; the QoS-1 will cause duplication and out-of-order; the the QoS-2 will cause out-of-order.<br>Observation:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;However, none of the assumptions happen.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Analysis:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;① The Mosquitto broker is set on cloud server in the city where I live in, and my partner also live nearby. The distance between us is very small, so we have a big bandwidth, thus the packets are not easy to lose, and they tend to arrive in order because there has little route to choose. The result is very similar to what I have tested on local broker, too.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;② My network setting is FTTH, the fibre comes into my house and links to the router directly. Normally, the upload rate is 10M/s. It is enough to send messages and avoid congestion.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;③ The hardware among the whole process performs well, and can deal with complex computation.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>2.2.3. Message gap</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Expectation:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;As the QoS level increases, the message gap will become bigger, for the reason that <strong>complex handshake is time consuming</strong>.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Observation:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Matches. But there exists some strange zeros in QoS-0.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Analysis:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;I guess the reason is that, the message packets arrive in the <strong>buffer</strong> zone of the Memory, then they are read by process in the same time, thus making the gap zero. Another reason is that I record the data with “filewriter”, this can not reflect the real situation, especially when the unit of time is very small.</p>
+<h2 id="Broader-network-Environment"><a href="#Broader-network-Environment" class="headerlink" title="Broader network Environment"></a>Broader network Environment</h2><p><strong>3.1. Challenges</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>3.1.1. CPU</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The resources allocation in a computing system can be briefly divided into two parts:<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(1)Process<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Process is the basic unit that the operating system will allocate resources to, including CPU, Memory, Disk…<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(2)Thread<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;A process can be divided into many threads, and threads are handled by CPU.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;It seems that many threads can be executed at the same time, however, the answer is no. There is a mechanism called “time slice”, the allocated CPU resources can only execute one thread at a time, and quickly switch to execute another thread, making it looks like a simultaneous procedure.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The scheduling mechanism determines that, if there exist too many processes and threads (e.g. dealing with too much message), the CPU can not afford the huge cost and just breaks down. </p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>3.1.2. Memory</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Memory is a place where can store data temporarily. In a process, the data will be read to memory first, and sent to CPU to calculate later, finally written back to the disk or sent to the remote devices.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The capacity of memory is limited. When too many messages come in the buffer zone at the same time, the memory will overflow, thus fail to respond.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;**3.1.3. Network    **<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;One of the most important concept of network is bandwidth. The bandwidth of network lines is limited, which is decided by the physical property. When there are too many packets in transmission, delay and loss happens. For example, a packet arrives a router, but the buffer zone of router is fully laden, so the packet will be discarded.</p>
+<p><strong>3.2. How QoS may help</strong></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>3.2.1. Use QoS-0 for devices with lower performance</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Dealing with messages is time and physic consuming. For some poorly performing devices, it is better to avoid too many messages and handshake process, or we can say, transmit as much effective information as possible in limited operations. From the Q1 above, we find that the QoS-0 level only send message once, and does not require any feedback. The other two levels might be too complex, which will place burden on devices.<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The experiment above also proves that, the lower QoS level, the less handshakes, and the more effective information.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<strong>3.2.2. Use QoS-1/2 for flow control</strong><br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;To avoid too many messages come in simultaneously, another method is flow control. There might be some transfer stations( brokers, routers…) in the net work, which can help to store packets temporarily, and make messages wait in queues. This will be very useful when there is a sudden flow peak.</p>
+
+    </div>
+
+    
+    
+    
+
+    <footer class="post-footer">
+          <div class="post-tags">
+              <a href="/tags/MQTT/" rel="tag"># MQTT</a>
+          </div>
+
+        
+
+          <div class="post-nav">
+            <div class="post-nav-item">
+                <a href="/2021/05/23/MQTT%E7%B3%BB%E5%88%97(2)-%E4%BB%A3%E7%A0%81%E7%AF%87/" rel="prev" title="MQTT系列(2)-代码实现">
+                  <i class="fa fa-chevron-left"></i> MQTT系列(2)-代码实现
+                </a>
+            </div>
+            <div class="post-nav-item">
+            </div>
+          </div>
+    </footer>
+  </article>
+  
+  
+  
+
+
+
+      
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      const activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      const commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      
+
+      
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder"></span>
+</div>
+<div class="busuanzi-count">
+    <span class="post-meta-item" id="busuanzi_container_site_uv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-user"></i>
+      </span>
+      <span class="site-uv" title="总访客量">
+        <span id="busuanzi_value_site_uv"></span>
+      </span>
+    </span>
+    <span class="post-meta-item" id="busuanzi_container_site_pv" style="display: none;">
+      <span class="post-meta-item-icon">
+        <i class="fa fa-eye"></i>
+      </span>
+      <span class="site-pv" title="总访问量">
+        <span id="busuanzi_value_site_pv"></span>
+      </span>
+    </span>
+</div>
+  <div class="powered-by">由 <a href="https://hexo.io/" class="theme-link" rel="noopener" target="_blank">Hexo</a> & <a href="https://theme-next.js.org/" class="theme-link" rel="noopener" target="_blank">NexT.Gemini</a> 强力驱动
+  </div>
+
+    </div>
+  </footer>
+
+  
+  <script src="//cdn.jsdelivr.net/npm/animejs@3.2.0/lib/anime.min.js"></script>
+<script src="/js/utils.js"></script><script src="/js/motion.js"></script><script src="/js/next-boot.js"></script>
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
